@@ -1,0 +1,11 @@
+# Normalise line endings so that a fresh clone reproduces the same bytes everywhere.
+* text=auto eol=lf
+
+# Binary fixtures and artifacts must never be normalised.
+*.lgstore binary
+*.lgjournal binary
+*.png binary
+*.jpg binary
+*.zip binary
+
+# Keep generated vendored sources out of language statistics.
