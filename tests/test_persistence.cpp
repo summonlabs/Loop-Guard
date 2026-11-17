@@ -1,5 +1,11 @@
 #include <algorithm>
+#include <chrono>
+#include <cstdint>
+#include <fstream>
 #include <set>
+#include <string>
+#include <thread>
+#include <vector>
 
 #include "fixtures.hpp"
 #include "harness.hpp"
@@ -351,4 +357,31 @@ LG_TEST(persistence, store_state_codec_round_trips) {
   std::vector<std::uint8_t> trailing = encoded;
   trailing.push_back(0U);
   LG_CHECK(!decode_store_state(trailing, limits).has_value());
+}
+
+LG_TEST(persistence, an_atomic_write_waits_for_a_reader_to_close) {
+  const std::string path = scratch_path("persistence-atomic-reader.bin");
+  remove_scratch(path);
+  const std::vector<std::uint8_t> first = {1, 2, 3};
+  const std::vector<std::uint8_t> second = {4, 5, 6, 7};
+  LG_REQUIRE(write_file_atomic(path, first).is_ok());
+  bool reader_opened = false;
+  bool written = false;
+  {
+    // Another tool reading the store (an inspection, a scan) holds the file
+    // open while it is replaced, and closes it shortly after.
+    std::ifstream reader(path, std::ios::binary);
+    reader_opened = reader.is_open();
+    std::thread writer([&path, &second, &written] { written = write_file_atomic(path, second).is_ok(); });
+    std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    reader.close();
+    writer.join();
+  }
+  const auto stored = read_file_bounded(path, 64);
+  remove_scratch(path);
+  LG_CHECK(reader_opened);
+  // The replacement waits for the reader instead of failing the write.
+  LG_CHECK(written);
+  LG_REQUIRE(stored.has_value());
+  LG_CHECK(stored.value() == second);
 }

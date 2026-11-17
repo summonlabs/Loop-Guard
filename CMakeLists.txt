@@ -47,8 +47,10 @@ function(lg_configure_target target)
       target_compile_options(${target} PRIVATE /analyze)
     endif()
     if(LG_ENABLE_ASAN)
-      target_compile_options(${target} PRIVATE /fsanitize=address)
-      target_link_options(${target} PRIVATE /fsanitize=address)
+      # Debug information is required: without it MSVC warns C5072, which /WX
+      # turns into an error, so the sanitized build did not compile.
+      target_compile_options(${target} PRIVATE /fsanitize=address /Zi)
+      target_link_options(${target} PRIVATE /fsanitize=address /INCREMENTAL:NO /DEBUG)
     endif()
   else()
     target_compile_options(${target} PRIVATE -Wall -Wextra -Wpedantic -Wshadow -Wconversion)

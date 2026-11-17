@@ -389,3 +389,13 @@ LG_TEST(wire, observation_codec_round_trip_and_bounds) {
   trailing.push_back(0U);
   LG_CHECK(!decode_observation(trailing, limits).has_value());
 }
+
+LG_TEST(wire, a_second_listener_cannot_take_a_listening_port) {
+  const SocketSubsystem subsystem;
+  LG_REQUIRE(subsystem.ok());
+  auto first = Listener::listen_loopback(0, std::uint32_t{8});
+  LG_REQUIRE(first.has_value());
+  auto second = Listener::listen_loopback(first.value().port(), std::uint32_t{8});
+  // Two guards must never share one listening port: the second bind fails.
+  LG_CHECK(!second.has_value());
+}

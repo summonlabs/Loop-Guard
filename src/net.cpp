@@ -333,7 +333,10 @@ Result<Listener> Listener::listen_loopback(std::uint16_t port, std::uint32_t bac
   }
   const int reuse = 1;
 #if defined(_WIN32)
-  ::setsockopt(native, SOL_SOCKET, SO_REUSEADDR, reinterpret_cast<const char*>(&reuse), sizeof(reuse));
+  // SO_REUSEADDR on Windows lets a second socket bind a port that is still
+  // listening; exclusive use makes that second bind fail instead.
+  ::setsockopt(native, SOL_SOCKET, SO_EXCLUSIVEADDRUSE, reinterpret_cast<const char*>(&reuse),
+               sizeof(reuse));
 #else
   ::setsockopt(native, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
 #endif

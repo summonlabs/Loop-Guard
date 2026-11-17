@@ -104,11 +104,27 @@ Status truncate_at(std::FILE* handle, std::uint64_t size) {
 
 Status rename_over(const std::string& from, const std::string& to) {
 #if defined(_WIN32)
-  if (MoveFileExA(from.c_str(), to.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) ==
-      0) {
-    return Status::failure(Outcome::IoFailure, "atomic replace failed");
+  // While a reader has the destination open (an inspection, an antivirus or
+  // indexing scan) the replacement fails until the reader closes the file, so
+  // it is retried for a bounded time (about 2 s) instead of failing the write.
+  // A directory in the way is not transient and fails at once.
+  for (int attempt = 0;; ++attempt) {
+    if (MoveFileExA(from.c_str(), to.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) !=
+        0) {
+      return Status::ok();
+    }
+    const DWORD code = GetLastError();
+    const DWORD attributes = GetFileAttributesA(to.c_str());
+    const bool directory =
+        attributes != INVALID_FILE_ATTRIBUTES && (attributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+    const bool transient = (code == ERROR_ACCESS_DENIED || code == ERROR_SHARING_VIOLATION ||
+                            code == ERROR_LOCK_VIOLATION) &&
+                           !directory;
+    if (!transient || attempt >= 100) {
+      return Status::failure(Outcome::IoFailure, "atomic replace failed");
+    }
+    Sleep(20);
   }
-  return Status::ok();
 #else
   std::error_code error;
   std::filesystem::rename(from, to, error);
